@@ -165,6 +165,44 @@ export default function Studio() {
     a.click();
   };
 
+  // 拍照/上传图片：等比缩放铺到画板，可继续涂鸦后发布（同样经过内容审核）
+  const handlePhotoFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setMessage("只能选择图片文件哦");
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setMessage("图片太大啦，请选 15MB 以内的照片");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const ctx = ctxRef.current;
+        // contain 等比缩放（放大不超过 2 倍），居中铺到画板
+        const scale = Math.min(CANVAS_W / img.width, CANVAS_H / img.height, 2);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        pushHistory();
+        ctx.save();
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        ctx.drawImage(img, (CANVAS_W - w) / 2, (CANVAS_H - h) / 2, w, h);
+        ctx.restore();
+        setMessage("照片已铺上画板！可以继续涂鸦，写好标题就能发布");
+      };
+      img.onerror = () => setMessage("照片读取失败，换一张试试");
+      img.src = reader.result;
+    };
+    reader.onerror = () => setMessage("照片读取失败，换一张试试");
+    reader.readAsDataURL(file);
+  };
+
   return (
     <div className="container studio">
       <h1 className="page-title">画板创作</h1>
@@ -249,6 +287,16 @@ export default function Studio() {
 
         <div className="publish-panel">
           <h2 className="panel-title">发布到画展</h2>
+          <div className="upload-row">
+            <label className="btn-photo">
+              拍照作画
+              <input type="file" accept="image/*" capture="user" onChange={handlePhotoFile} hidden />
+            </label>
+            <label className="btn-photo">
+              上传图片
+              <input type="file" accept="image/*" onChange={handlePhotoFile} hidden />
+            </label>
+          </div>
           <label className="field">
             画作标题
             <input
