@@ -95,6 +95,20 @@ class LoginRequest(BaseModel):
     password: str = Field(..., description="密码")
 
 
+class CommentRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=200, description="评论内容（1-200 字）")
+
+
+class UpdateArtworkRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=50, description="新标题（不传则不变）")
+    description: str | None = Field(default=None, max_length=200, description="新简介（不传则不变）")
+    imageData: str | None = Field(default=None, description="新画面 dataURL（不传则不变）")
+
+
+class NicknameRequest(BaseModel):
+    nickname: str = Field(..., min_length=1, max_length=20, description="新昵称（1-20 字）")
+
+
 # ---------------------------------------------------------------- 鉴权
 
 def _bearer_token(authorization: str = Header(default="")) -> str:
@@ -143,6 +157,35 @@ def auth_logout(authorization: str = Header(default="")):
     if token:
         auth.logout(token)
     return {"message": "已退出登录"}
+
+
+@app.post("/api/auth/nickname")
+def auth_nickname(req: NicknameRequest, user: dict = Depends(require_user)):
+    """修改昵称：过审核后更新账号，并同步画展/评论里的历史署名。"""
+    ok, reason = moderation.check_text(req.nickname)
+    if not ok:
+        raise HTTPException(status_code=400, detail=reason)
+    try:
+        updated = auth.update_nickname(user["id"], req.nickname)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    # 同步画展画作署名与本人历史评论署名
+    nickname = updated["nickname"]
+    changed_artworks = 0
+    with _lock:
+        data = _load_gallery()
+        for item in data.get("items", []):
+            if item.get("userId") == user["id"]:
+                item["author"] = nickname
+                changed_artworks += 1
+            for c in item.get("comments", []):
+                if c.get("userId") == user["id"]:
+                    c["author"] = nickname
+        _save_gallery(data)
+    msg = "昵称已更新"
+    if changed_artworks:
+        msg += f"，{changed_artworks} 幅画作署名已同步"
+    return {"message": msg, "user": updated}
 
 
 # ---------------------------------------------------------------- API
@@ -259,6 +302,95 @@ def delete_artwork(artwork_id: str, user: dict = Depends(require_user)):
     suffix = Path(removed["image"]).suffix
     (ARTWORK_DIR / f"{artwork_id}{suffix}").unlink(missing_ok=True)
     return {"message": "画作已删除"}
+
+
+@app.put("/api/artworks/{artwork_id}")
+def update_artwork(artwork_id: str, req: UpdateArtworkRequest, user: dict = Depends(require_user)):
+    """编辑已发布画作：仅作者本人，可改标题/简介，传 imageData 则重画画面（均过审核）。"""
+    new_ext = None
+    new_raw = None
+    if req.imageData:
+        match = IMAGE_DATA_RE.match(req.imageData.strip())
+        if not match:
+            raise HTTPException(status_code=400, detail="图片数据格式不正确，请重新编辑后再更新")
+        try:
+            new_raw = base64.b64decode(match.group(2))
+        except Exception:
+            raise HTTPException(status_code=400, detail="图片解码失败，请重新编辑后再更新")
+        ok, reason = moderation.check_image(new_raw)
+        if not ok:
+            raise HTTPException(status_code=400, detail=reason)
+        new_ext = "png" if match.group(1) == "png" else "jpg"
+
+    if req.title is not None or req.description is not None:
+        ok, reason = moderation.check_text(req.title or "", req.description or "")
+        if not ok:
+            raise HTTPException(status_code=400, detail=reason)
+
+    with _lock:
+        data = _load_gallery()
+        item = next((a for a in data.get("items", []) if a["id"] == artwork_id), None)
+        if item is None:
+            raise HTTPException(status_code=404, detail="画作不存在或已被删除")
+        if item.get("userId") != user["id"]:
+            raise HTTPException(status_code=403, detail="只能编辑自己的画作")
+        if req.title is not None:
+            item["title"] = req.title.strip() or item["title"]
+        if req.description is not None:
+            item["description"] = req.description.strip()
+        if new_ext and new_raw is not None:
+            old_path = ARTWORK_DIR / f"{artwork_id}{Path(item['image']).suffix}"
+            new_path = ARTWORK_DIR / f"{artwork_id}.{new_ext}"
+            new_path.write_bytes(new_raw)
+            if old_path.exists() and old_path != new_path:
+                old_path.unlink(missing_ok=True)
+            item["image"] = f"/artworks-img/{artwork_id}.{new_ext}"
+        _save_gallery(data)
+    return {"message": "画作已更新", "artwork": item}
+
+
+@app.post("/api/artworks/{artwork_id}/comments")
+def add_comment(artwork_id: str, req: CommentRequest, user: dict = Depends(require_user)):
+    """发表评论：需登录，内容过色情低俗审核。"""
+    ok, reason = moderation.check_text(req.content)
+    if not ok:
+        raise HTTPException(status_code=400, detail=reason)
+    now = time.time()
+    comment = {
+        "id": uuid.uuid4().hex[:8],
+        "userId": user["id"],
+        "author": user["nickname"],
+        "content": req.content.strip(),
+        "createdAt": now,
+        "createdAtText": time.strftime("%Y-%m-%d %H:%M", time.localtime(now)),
+    }
+    with _lock:
+        data = _load_gallery()
+        item = next((a for a in data.get("items", []) if a["id"] == artwork_id), None)
+        if item is None:
+            raise HTTPException(status_code=404, detail="画作不存在或已被删除")
+        item.setdefault("comments", []).append(comment)
+        _save_gallery(data)
+    return {"message": "评论成功", "comment": comment, "total": len(item["comments"])}
+
+
+@app.delete("/api/artworks/{artwork_id}/comments/{comment_id}")
+def delete_comment(artwork_id: str, comment_id: str, user: dict = Depends(require_user)):
+    """删除评论：仅评论者本人。"""
+    with _lock:
+        data = _load_gallery()
+        item = next((a for a in data.get("items", []) if a["id"] == artwork_id), None)
+        if item is None:
+            raise HTTPException(status_code=404, detail="画作不存在或已被删除")
+        comments = item.get("comments", [])
+        target = next((c for c in comments if c["id"] == comment_id), None)
+        if target is None:
+            raise HTTPException(status_code=404, detail="评论不存在或已被删除")
+        if target.get("userId") != user["id"]:
+            raise HTTPException(status_code=403, detail="只能删除自己的评论")
+        item["comments"] = [c for c in comments if c["id"] != comment_id]
+        _save_gallery(data)
+    return {"message": "评论已删除", "total": len(item["comments"])}
 
 
 @app.get("/api/stats")

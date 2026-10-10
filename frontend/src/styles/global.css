@@ -848,3 +848,132 @@ a {
   background: #ffefe4;
   border-color: #ff7f50;
 }
+
+/* ---- 画作编辑 ---- */
+.edit-banner {
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: #fff4e6;
+  border: 1px solid #ffd9b3;
+  color: #c96f4a;
+  font-size: 13px;
+  text-align: center;
+}
+.edit-form .field {
+  margin-bottom: 10px;
+}
+.edit-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* ---- 评论区 ---- */
+.comments-panel {
+  margin-top: 26px;
+  background: #fffdfb;
+  border: 1px solid #f3e4d7;
+  border-radius: 14px;
+  padding: 18px 20px;
+}
+.comments-panel .panel-title {
+  margin: 0 0 14px;
+  font-size: 17px;
+}
+.comment-composer textarea {
+  width: 100%;
+  resize: vertical;
+}
+.composer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+.composer-count {
+  font-size: 12px;
+  color: #b0a39c;
+}
+.comment-login-tip {
+  font-size: 14px;
+  color: #8a7f78;
+  margin: 0 0 6px;
+}
+.comment-list {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.comment-item {
+  border-top: 1px dashed #f0e2d6;
+  padding-top: 12px;
+}
+.comment-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.comment-time {
+  color: #b0a39c;
+  font-size: 12px;
+}
+.comment-del {
+  margin-left: auto;
+  border: none;
+  background: none;
+  color: #d63031;
+  font-size: 12px;
+  cursor: pointer;
+}
+.comment-del:hover {
+  text-decoration: underline;
+}
+.comment-content {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: #4a4238;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---- 我的昵称资料卡 ---- */
+.profile-card {
+  margin: 16px 0 22px;
+  background: #fffdfb;
+  border: 1px solid #f3e4d7;
+  border-radius: 14px;
+  padding: 14px 18px;
+}
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.profile-label {
+  font-size: 13px;
+  color: #8a7f78;
+}
+.profile-name {
+  font-size: 16px;
+  color: #4a4238;
+}
+.profile-edit {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+.profile-edit input {
+  flex: 1;
+}
+.profile-msg {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #00b894;
+}
+.profile-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: #b0a39c;
+}

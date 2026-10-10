@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { getToken, setToken, me as apiMe, logout as apiLogout, login as apiLogin, register as apiRegister } from "../api";
+import { getToken, setToken, me as apiMe, logout as apiLogout, login as apiLogin, register as apiRegister, updateNickname as apiUpdateNickname } from "../api";
 
 const AuthContext = createContext(null);
 
@@ -55,6 +55,11 @@ export function AuthProvider({ children }) {
         }
         setToken("");
         setUser(null);
+      },
+      async updateNickname(nickname) {
+        const res = await apiUpdateNickname(nickname);
+        setUser(res.user);
+        return res;
       },
       refresh,
     }),

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { publishArtwork } from "../api";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { getArtwork, publishArtwork, updateArtwork } from "../api";
 import { useAuth } from "../context/AuthContext";
 
 const CANVAS_W = 960;
@@ -49,6 +49,10 @@ export default function Studio() {
   const [message, setMessage] = useState("");
   const navigate = useNavigate();
   const { user, isLoggedIn } = useAuth();
+  const [searchParams] = useSearchParams();
+  // 编辑模式：从详情页「重画这幅画」跳转而来，发布时替换原画面
+  const editId = searchParams.get("artworkId");
+  const [editLoaded, setEditLoaded] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -62,6 +66,45 @@ export default function Studio() {
     ctxRef.current = ctx;
     historyRef.current = [canvas.toDataURL()];
   }, []);
+
+  // 编辑模式：加载原画作到画板并回填标题/简介
+  useEffect(() => {
+    if (!editId || !isLoggedIn) return;
+    let cancelled = false;
+    getArtwork(editId)
+      .then((art) => {
+        if (cancelled) return;
+        if (art.userId !== user.id) {
+          setMessage("只能重画自己的画作哦");
+          navigate("/studio", { replace: true });
+          return;
+        }
+        setTitle(art.title);
+        setDescription(art.description || "");
+        const img = new Image();
+        img.onload = () => {
+          if (cancelled) return;
+          const ctx = ctxRef.current;
+          ctx.save();
+          ctx.globalCompositeOperation = "source-over";
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+          ctx.drawImage(img, 0, 0, CANVAS_W, CANVAS_H);
+          ctx.restore();
+          setEditLoaded(true);
+        };
+        img.onerror = () => setMessage("原画作图片加载失败，刷新页面重试");
+        img.src = art.image;
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setMessage(err.message);
+        navigate("/studio", { replace: true });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editId, isLoggedIn]);
 
   const pushHistory = () => {
     if (historyRef.current.length >= 30) historyRef.current.shift();
@@ -149,9 +192,15 @@ export default function Studio() {
       setPublishing(true);
       setMessage("");
       const imageData = canvasRef.current.toDataURL("image/png");
-      const res = await publishArtwork({ title, description, imageData });
-      setMessage("发布成功，正在带你去看画展...");
-      setTimeout(() => navigate(`/artwork/${res.artwork.id}`), 800);
+      if (editId) {
+        const res = await updateArtwork(editId, { title, description, imageData });
+        setMessage("画作已更新，正在带你去看...");
+        setTimeout(() => navigate(`/artwork/${res.artwork.id}`), 800);
+      } else {
+        const res = await publishArtwork({ title, description, imageData });
+        setMessage("发布成功，正在带你去看画展...");
+        setTimeout(() => navigate(`/artwork/${res.artwork.id}`), 800);
+      }
     } catch (err) {
       setMessage(err.message);
       setPublishing(false);
@@ -287,6 +336,11 @@ export default function Studio() {
 
         <div className="publish-panel">
           <h2 className="panel-title">发布到画展</h2>
+          {editId && (
+            <div className="edit-banner">
+              正在重画已发布的画作，更新后会替换原画面与信息
+            </div>
+          )}
           <div className="upload-row">
             <label className="btn-photo">
               拍照作画
@@ -323,8 +377,20 @@ export default function Studio() {
               maxLength={200}
             />
           </label>
-          <button className="btn btn-primary btn-block" onClick={handlePublish} disabled={publishing}>
-            {publishing ? "发布中..." : isLoggedIn ? "发布到画展" : "登录后发布"}
+          <button
+            className="btn btn-primary btn-block"
+            onClick={handlePublish}
+            disabled={publishing || (!!editId && !editLoaded)}
+          >
+            {publishing
+              ? "提交中..."
+              : editId
+              ? editLoaded
+                ? "更新画作"
+                : "正在载入原作..."
+              : isLoggedIn
+              ? "发布到画展"
+              : "登录后发布"}
           </button>
           <button className="btn btn-ghost btn-block" onClick={handleDownload}>
             先保存到电脑看看

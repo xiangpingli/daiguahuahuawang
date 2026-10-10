@@ -150,3 +150,16 @@ def get_user_by_token(token: str):
             conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
             return None
         return _user_dict(row)
+
+
+def update_nickname(user_id: int, nickname: str) -> dict:
+    """修改昵称，返回更新后的用户信息。"""
+    nickname = (nickname or "").strip()[:20]
+    if not nickname:
+        raise ValueError("昵称不能为空")
+    with _conn() as conn:
+        cur = conn.execute("UPDATE users SET nickname = ? WHERE id = ?", (nickname, user_id))
+        if cur.rowcount == 0:
+            raise ValueError("用户不存在")
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        return _user_dict(row)

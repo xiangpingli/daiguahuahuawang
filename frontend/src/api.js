@@ -56,6 +56,37 @@ export const likeArtwork = (id) =>
 export const deleteArtwork = (id) =>
   request(`/api/artworks/${encodeURIComponent(id)}`, { method: "DELETE" });
 
+/** 编辑已发布画作：改标题/简介，传 imageData 则重画画面（仅作者本人） */
+export const updateArtwork = (id, payload) =>
+  request(`/api/artworks/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+/** 发表评论（需登录，内容过审核） */
+export const addComment = (artworkId, content) =>
+  request(`/api/artworks/${encodeURIComponent(artworkId)}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
+
+/** 删除评论（仅评论者本人） */
+export const deleteComment = (artworkId, commentId) =>
+  request(
+    `/api/artworks/${encodeURIComponent(artworkId)}/comments/${encodeURIComponent(commentId)}`,
+    { method: "DELETE" }
+  );
+
+/** 修改昵称（同步画作署名） */
+export const updateNickname = (nickname) =>
+  request("/api/auth/nickname", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nickname }),
+  });
+
 /** 站点统计 */
 export const getStats = () => request("/api/stats");
 

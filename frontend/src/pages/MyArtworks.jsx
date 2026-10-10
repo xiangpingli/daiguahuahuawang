@@ -4,10 +4,14 @@ import { listMyArtworks, deleteArtwork } from "../api";
 import { useAuth } from "../context/AuthContext";
 
 export default function MyArtworks() {
-  const { isLoggedIn, loading: authLoading } = useAuth();
+  const { isLoggedIn, loading: authLoading, user, updateNickname } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [nameEditing, setNameEditing] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [nameBusy, setNameBusy] = useState(false);
+  const [nameMsg, setNameMsg] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -32,6 +36,26 @@ export default function MyArtworks() {
     }
   };
 
+  const handleRename = async () => {
+    if (nameBusy) return;
+    const nickname = newName.trim();
+    if (!nickname) {
+      setNameMsg("昵称不能为空");
+      return;
+    }
+    try {
+      setNameBusy(true);
+      const res = await updateNickname(nickname);
+      setNameMsg(res.message);
+      setNameEditing(false);
+      setItems((prev) => prev.map((a) => ({ ...a, author: res.user.nickname })));
+    } catch (err) {
+      setNameMsg(err.message);
+    } finally {
+      setNameBusy(false);
+    }
+  };
+
   if (authLoading || loading) {
     return (
       <div className="container my-page">
@@ -44,6 +68,38 @@ export default function MyArtworks() {
     <div className="container my-page">
       <h1 className="page-title">我的画作</h1>
       <p className="page-sub">你发布的画作都在这里，可以随时删除</p>
+
+      <div className="profile-card">
+        <div className="profile-row">
+          <span className="profile-label">我的昵称</span>
+          <strong className="profile-name">{user.nickname}</strong>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              setNameEditing(!nameEditing);
+              setNewName("");
+              setNameMsg("");
+            }}
+          >
+            {nameEditing ? "收起" : "修改昵称"}
+          </button>
+        </div>
+        {nameEditing && (
+          <div className="profile-edit">
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="输入新昵称（1-20 字）"
+              maxLength={20}
+            />
+            <button className="btn btn-primary btn-sm" onClick={handleRename} disabled={nameBusy}>
+              {nameBusy ? "保存中..." : "保存"}
+            </button>
+          </div>
+        )}
+        {nameMsg && <p className="profile-msg">{nameMsg}</p>}
+        <p className="profile-hint">改名后，你已发布画作的署名会一起更新</p>
+      </div>
 
       {error && <div className="empty-tip error">{error}</div>}
 
